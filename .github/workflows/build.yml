@@ -59,7 +59,7 @@ jobs:
       matrix:
         os: [windows-latest, macos-15, ubuntu-24.04, ubuntu-24.04-arm]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - name: Setup Windows
@@ -143,7 +143,7 @@ jobs:
     steps:
       - name: Install build toolchain
         run: apk add --no-cache clang lld cmake make g++ curl git perl go bash linux-headers python3 openssl tar zstd
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - uses: pnpm/action-setup@v4
@@ -210,7 +210,7 @@ jobs:
     needs: prepare
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - uses: pnpm/action-setup@v4
