@@ -1,0 +1,28 @@
+{
+   "outdir": "./reports/servers",
+   "servers": [
+      {
+         "url": "ws://localhost:9001",
+         "agent": "uws non-SSL, non-compression"
+      },
+      {
+         "url": "wss://localhost:9002",
+         "agent": "uws SSL, shared compressor"
+      },
+      {
+         "url": "ws://localhost:9003",
+         "agent": "uws non-SSL, dedicated compressor"
+      },
+      {
+         "url": "ws://localhost:9004",
+         "agent": "uws non-SSL, non-compression, pubsub based"
+      },
+      {
+         "url": "wss://localhost:9005",
+         "agent": "uws SSL, non-compression, pubsub based"
+      }
+   ],
+   "cases": ["*.*"],
+   "exclude-cases": [],
+   "exclude-agent-cases": {}
+}

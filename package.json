@@ -1,0 +1,55 @@
+{
+    "author": "ICJR",
+    "description": "Fork of uWebSockets.js with the uWebSockets and uSockets engine flattened into a single repository",
+    "devDependencies": {
+        "@esportsplus/typescript": "^0.33.5",
+        "@types/autocannon": "^7.12.7",
+        "@types/node": "^26.5.0",
+        "@types/ws": "^8.18.1",
+        "autocannon": "^8.0.0",
+        "tsx": "^4.23.13",
+        "vite": "^8.2.2",
+        "vitest": "^5.0.0",
+        "ws": "^8.21.3"
+    },
+    "engines": {
+        "node": ">=26"
+    },
+    "exports": {
+        ".": {
+            "types": "./build/index.d.ts",
+            "default": "./build/index.js"
+        }
+    },
+    "files": [
+        "build",
+        "dist/*.node"
+    ],
+    "main": "build/index.js",
+    "name": "@esportsplus/uws",
+    "packageManager": "pnpm@11.10.0",
+    "publishConfig": {
+        "access": "restricted"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/esportsplus/uws"
+    },
+    "scripts": {
+        "bench": "tsx bench/http/http.bench.ts && tsx bench/ws/ws.bench.ts",
+        "bench:http": "tsx bench/http/http.bench.ts",
+        "bench:ws": "tsx bench/ws/ws.bench.ts",
+        "build": "tsc -p tsconfig.build.json",
+        "build:native": "node src/native.ts",
+        "build:native:asan": "node src/native.ts --asan",
+        "certs": "bash scripts/gen-test-certs.sh",
+        "check:package": "node scripts/check-package.mjs",
+        "prepublishOnly": "pnpm build && pnpm check:package",
+        "smoke": "tsx test/smoke.ts",
+        "test": "vitest run",
+        "typecheck": "tsc --noEmit -p tsconfig.json"
+    },
+    "type": "module",
+    "types": "build/index.d.ts",
+    "version": "0.0.1"
+}

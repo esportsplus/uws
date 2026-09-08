@@ -1,0 +1,25 @@
+/* Minimal SSL/non-SSL example using PROXY Protocol v2 */
+
+import * as uWS from '../../src/index';
+const port = 3000;
+
+const app = uWS./*SSL*/App({
+  key_file_name: '.tmp/key.pem',
+  cert_file_name: '.tmp/cert.pem',
+  passphrase: '1234'
+}).get('/*', (res, req) => {
+  /* Respond with their addresses */
+  res.cork(() => {
+    res.write('<html><h1>');
+    res.write('Your proxied IP is: ' + Buffer.from(res.getProxiedRemoteAddressAsText()).toString());
+    res.write('</h1><h1>');
+    res.write('Your IP as seen by the origin server is: ' + Buffer.from(res.getRemoteAddressAsText()).toString());
+    res.end('</h1></html>');
+  });
+}).listen(port, (listenSocket) => {
+  if (listenSocket) {
+    console.log('Listening to port ' + port);
+  } else {
+    console.log('Failed to listen to port ' + port);
+  }
+});

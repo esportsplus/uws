@@ -1,0 +1,3 @@
+{
+    "extends": "@esportsplus/typescript/tsconfig.package.dev.json"
+}

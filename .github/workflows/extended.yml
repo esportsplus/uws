@@ -1,0 +1,178 @@
+name: extended tests
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: [bump version]
+    branches: [main]
+    types: [completed]
+  schedule:
+    - cron: '23 10 * * *'
+  workflow_dispatch:
+concurrency:
+  group: uws-extended-tests
+  cancel-in-progress: true
+permissions:
+  contents: read
+env:
+  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+jobs:
+  supersede:
+    if: github.event_name == 'push' || github.event_name == 'workflow_run'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'Cancelled outdated extended tests. The next nightly or manual run will test current main.'
+  native:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.revision.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Record tested revision
+        id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - name: Identify addon cache
+        id: addon
+        shell: bash
+        run: |
+          key=$(node src/native.ts --addon-cache-key)
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+      - name: Cache native binaries
+        id: addon-cache
+        uses: actions/cache@v4
+        with:
+          path: dist/*.node
+          key: addon-${{ steps.addon.outputs.key }}
+      - name: Identify BoringSSL cache
+        if: steps.addon-cache.outputs.cache-hit != 'true'
+        id: boringssl
+        shell: bash
+        run: |
+          key=$(node src/native.ts --boringssl-cache-key)
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+      - name: Cache BoringSSL libraries
+        if: steps.addon-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: deps/boringssl-cache/${{ steps.boringssl.outputs.key }}
+          key: boringssl-${{ steps.boringssl.outputs.key }}
+      - run: pnpm build:native
+        if: steps.addon-cache.outputs.cache-hit != 'true'
+      - name: Verify native binaries
+        run: node src/native.ts --check-native
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extended-native
+          path: dist/*.node
+          if-no-files-found: error
+  autobahn:
+    needs: native
+    timeout-minutes: 120
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.native.outputs.sha }}
+      - uses: pnpm/action-setup@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: extended-native
+          path: dist
+      - name: Generate test certificates
+        run: pnpm certs
+      - name: Start Autobahn servers
+        run: pnpm exec tsx test/Autobahn.ts &
+      - name: Wait for servers
+        run: npx --yes wait-on --timeout 60000 tcp:9001 tcp:9002 tcp:9003 tcp:9004 tcp:9005
+      - name: Run Autobahn fuzzing client
+        run: |
+          mkdir -p reports
+          docker run --rm --network host \
+            -v "$PWD/test/fuzzingclient.json:/fuzzingclient.json" \
+            -v "$PWD/reports:/reports" \
+            crossbario/autobahn-testsuite:25.10.1@sha256:519915fb568b04c9383f70a1c405ae3ff44ab9e35835b085239c258b6fac3074 wstest -m fuzzingclient -s /fuzzingclient.json
+      - name: Check for failed cases
+        run: node --import tsx test/autobahn/report.ts reports/servers/index.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: autobahn-server-reports
+          path: reports
+  autobahn-client:
+    needs: [native, autobahn]
+    if: ${{ !cancelled() && needs.native.result == 'success' }}
+    timeout-minutes: 120
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.native.outputs.sha }}
+      - uses: pnpm/action-setup@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: extended-native
+          path: dist
+      - name: Run Autobahn echo client
+        run: |
+          mkdir -p reports
+          docker rm -f uws-fuzzingserver >/dev/null 2>&1 || true
+          docker run --rm --name uws-fuzzingserver --network host \
+            -v "$PWD/test/autobahn:/config:ro" \
+            -v "$PWD/reports:/reports" \
+            crossbario/autobahn-testsuite:25.10.1@sha256:519915fb568b04c9383f70a1c405ae3ff44ab9e35835b085239c258b6fac3074 \
+            wstest -m fuzzingserver -s /config/fuzzingserver.json &
+          trap 'docker kill uws-fuzzingserver >/dev/null 2>&1 || true' EXIT
+          npx --yes wait-on --timeout 60000 tcp:9001
+          node --import tsx test/autobahn/echo-client.ts
+          sleep 1
+          node --import tsx test/autobahn/report.ts reports/index.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: autobahn-client-reports
+          path: reports
+  bench:
+    needs: native
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.native.outputs.sha }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: extended-native
+          path: dist
+      - run: pnpm bench >> "$GITHUB_STEP_SUMMARY"

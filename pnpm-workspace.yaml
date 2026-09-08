@@ -1,0 +1,9 @@
+minimumReleaseAgeExclude:
+  - '@esportsplus/cli-passthrough@0.0.15'
+  - '@esportsplus/typescript@0.33.5'
+  - '@esportsplus/utilities@0.28.0'
+  - tsc-alias@1.9.4
+  - '@types/node@26.5.0'
+onlyBuiltDependencies:
+  - esbuild
+strictDepBuilds: false

@@ -1,0 +1,46 @@
+name: bump version
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Detect initial release
+        id: initial
+        run: |
+          initial=false
+          if [ "$(git rev-list --count HEAD)" = 1 ] && [ "$(node -p "require('./package.json').version")" = 0.0.1 ]; then
+            initial=true
+          fi
+          echo "release=$initial" >> "$GITHUB_OUTPUT"
+      - name: Bump version
+        if: steps.initial.outputs.release != 'true'
+        id: bump
+        uses: jpb06/bump-package@latest
+        with:
+          minor-keywords: feat,minor,refactor
+          patch-keywords: fix,chore,perf
+          should-default-to-patch: true
+      - name: Record release commit
+        if: steps.initial.outputs.release == 'true' || steps.bump.outputs.bump-performed == 'true'
+        run: git rev-parse HEAD > release-sha.txt
+      - uses: actions/upload-artifact@v4
+        if: steps.initial.outputs.release == 'true' || steps.bump.outputs.bump-performed == 'true'
+        with:
+          name: release-revision
+          path: release-sha.txt
+          if-no-files-found: error

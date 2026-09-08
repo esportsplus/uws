@@ -1,0 +1,265 @@
+name: build
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+  workflow_run:
+    workflows: [bump version]
+    branches: [main]
+    types: [completed]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  actions: read
+env:
+  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+jobs:
+  prepare:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.revision.outputs.sha }}
+    steps:
+      - name: Download bumped revision
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: release-revision
+          path: release
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: Select release revision
+        id: revision
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DEFAULT_SHA: ${{ github.sha }}
+        run: |
+          sha="$DEFAULT_SHA"
+          if [ "$EVENT_NAME" = workflow_run ]; then
+            sha=$(cat release/release-sha.txt)
+          fi
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Record build revision
+        env:
+          RELEASE_SHA: ${{ steps.revision.outputs.sha }}
+        run: echo "$RELEASE_SHA" > release-sha.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-revision
+          path: release-sha.txt
+          if-no-files-found: error
+  build:
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15, ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - name: Setup Windows
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Setup NASM for Windows
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/setup-nasm@v1.2.1
+      - uses: pnpm/action-setup@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Identify addon cache
+        id: addon
+        shell: bash
+        run: |
+          key=$(node src/native.ts --addon-cache-key)
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+      - name: Cache native binaries
+        id: addon-cache
+        uses: actions/cache@v4
+        with:
+          path: dist/*.node
+          key: addon-${{ steps.addon.outputs.key }}
+      - name: Identify BoringSSL cache
+        if: steps.addon-cache.outputs.cache-hit != 'true'
+        id: boringssl
+        shell: bash
+        run: |
+          key=$(node src/native.ts --boringssl-cache-key)
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+      - name: Cache BoringSSL libraries
+        if: steps.addon-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: deps/boringssl-cache/${{ steps.boringssl.outputs.key }}
+          key: boringssl-${{ steps.boringssl.outputs.key }}
+      - name: build native addon
+        if: steps.addon-cache.outputs.cache-hit != 'true'
+        run: pnpm build:native
+      - name: Verify native binaries
+        run: node src/native.ts --check-native
+      - name: Smoke test
+        run: pnpm smoke
+      - name: Configure dual-stack localhost
+        if: runner.os == 'Linux'
+        run: echo '::1 localhost' | sudo tee -a /etc/hosts
+      - name: Test
+        run: pnpm test --reporter=default --reporter=json --outputFile=.tmp/test-results.json
+        env:
+          UWS_NET_TESTS: ${{ (matrix.os == 'windows-latest' || matrix.os == 'ubuntu-24.04' || matrix.os == 'ubuntu-24.04-arm') && '1' || '' }}
+          UWS_SLOW_TESTS: ${{ (matrix.os == 'ubuntu-24.04' || matrix.os == 'ubuntu-24.04-arm') && '1' || '' }}
+      - name: Summarize test timings
+        if: always()
+        run: node scripts/test-timings.mjs .tmp/test-results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: timings-${{ matrix.os }}
+          path: .tmp/test-results.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: dist/*.node
+          if-no-files-found: error
+  build-musl:
+    env:
+      CC: clang
+      CXX: clang++
+      UWS_CC: clang
+      UWS_CXX: clang++
+      UWS_LD: lld
+    needs: prepare
+    runs-on: ubuntu-24.04
+    container: node:26-alpine
+    steps:
+      - name: Install build toolchain
+        run: apk add --no-cache clang lld cmake make g++ curl git perl go bash linux-headers python3 openssl tar zstd
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: pnpm/action-setup@v4
+      - name: Configure npm auth
+        run: printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$HOME/.npmrc"
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Identify addon cache
+        id: addon
+        shell: bash
+        run: |
+          key=$(node src/native.ts --addon-cache-key)
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+      - name: Cache native binaries
+        id: addon-cache
+        uses: actions/cache@v4
+        with:
+          path: dist/*.node
+          key: addon-${{ steps.addon.outputs.key }}
+      - name: Identify BoringSSL cache
+        if: steps.addon-cache.outputs.cache-hit != 'true'
+        id: boringssl
+        run: |
+          key=$(node src/native.ts --boringssl-cache-key)
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+        env:
+          CC: clang
+          CXX: clang++
+      - name: Cache BoringSSL libraries
+        if: steps.addon-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: deps/boringssl-cache/${{ steps.boringssl.outputs.key }}
+          key: boringssl-${{ steps.boringssl.outputs.key }}
+      - name: build native addon
+        if: steps.addon-cache.outputs.cache-hit != 'true'
+        run: |
+          export UWS_CC=clang UWS_CXX=clang++ UWS_LD=lld CC=clang CXX=clang++
+          pnpm build:native
+      - name: Verify native binaries
+        run: node src/native.ts --check-native
+      - name: Configure dual-stack localhost
+        if: runner.os == 'Linux'
+        run: echo '::1 localhost' | tee -a /etc/hosts
+      - name: Test
+        run: pnpm test --reporter=default --reporter=json --outputFile=.tmp/test-results.json
+        env:
+          UWS_NET_TESTS: '1'
+          UWS_SLOW_TESTS: '1'
+      - name: Summarize test timings
+        if: always()
+        run: node scripts/test-timings.mjs .tmp/test-results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: timings-linux-musl
+          path: .tmp/test-results.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux-musl
+          path: dist/*.node
+          if-no-files-found: error
+  asan:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: pnpm/action-setup@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Identify addon cache
+        id: addon
+        shell: bash
+        run: |
+          key=$(node src/native.ts --asan --addon-cache-key)
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+      - name: Cache native binaries
+        id: addon-cache
+        uses: actions/cache@v4
+        with:
+          path: dist/*.node
+          key: addon-${{ steps.addon.outputs.key }}
+      - name: Identify BoringSSL cache
+        if: steps.addon-cache.outputs.cache-hit != 'true'
+        id: boringssl
+        shell: bash
+        run: |
+          key=$(node src/native.ts --asan --boringssl-cache-key)
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+      - name: Cache BoringSSL libraries
+        if: steps.addon-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: deps/boringssl-cache/${{ steps.boringssl.outputs.key }}
+          key: boringssl-${{ steps.boringssl.outputs.key }}
+      - name: build native addon with ASAN
+        if: steps.addon-cache.outputs.cache-hit != 'true'
+        run: pnpm build:native:asan
+      - name: Verify native binaries
+        run: node src/native.ts --asan --check-native
+      - name: Configure dual-stack localhost
+        if: runner.os == 'Linux'
+        run: echo '::1 localhost' | sudo tee -a /etc/hosts
+      - name: Test under ASAN
+        env:
+          UWS_NET_TESTS: '1'
+          UWS_SLOW_TESTS: '1'
+        run: |
+          export LD_PRELOAD="$(clang-18 -print-file-name=libclang_rt.asan-x86_64.so)"
+          export ASAN_OPTIONS=detect_leaks=0:abort_on_error=1:handle_segv=1
+          pnpm test

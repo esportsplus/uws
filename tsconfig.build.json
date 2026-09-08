@@ -1,0 +1,4 @@
+{
+    "extends": "@esportsplus/typescript/tsconfig.package.json",
+    "exclude": ["src/native.ts"]
+}

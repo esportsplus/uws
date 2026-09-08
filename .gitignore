@@ -1,0 +1,10 @@
+*.o
+*.obj
+.remote.env
+.tmp/
+build/
+deps/
+dist/
+node_modules/
+src/**/*.js
+test/**/*.js
