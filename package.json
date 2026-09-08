@@ -2,7 +2,7 @@
     "author": "ICJR",
     "description": "Fork of uWebSockets.js with the uWebSockets and uSockets engine flattened into a single repository",
     "devDependencies": {
-        "@esportsplus/typescript": "^0.33.5",
+        "@esportsplus/typescript": "^0.34.1",
         "@types/autocannon": "^7.12.7",
         "@types/node": "^26.5.0",
         "@types/ws": "^8.18.1",

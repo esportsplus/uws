@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@esportsplus/typescript':
-        specifier: ^0.33.5
-        version: 0.33.5
+        specifier: ^0.34.1
+        version: 0.34.1
       '@types/autocannon':
         specifier: ^7.12.7
         version: 7.12.7
@@ -201,15 +201,15 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@esportsplus/cli-passthrough@0.0.15':
-    resolution: {integrity: sha512-HOO2MAJ2KcHRMND9Obo9/CRdsgud4e3sqggj1d0xuD4XQMzBW02yF/c1bV6BAMR1o2PDaEdoufL/dkLVyuiD2g==}
+  '@esportsplus/cli-passthrough@0.0.18':
+    resolution: {integrity: sha512-Vk37QhV09aW/PKkwGULox5lYupMyZHl06XZtrxwltk0TDJCdkAgMGteG7AU4qohurlDC3GDhnv16lItYl7dfkw==}
 
-  '@esportsplus/typescript@0.33.5':
-    resolution: {integrity: sha512-UG+c3kbs/p8pw/VbNf6vJltPuib4h3CHIVRfUhSoSkiuLbBX+K9MhzUAvvOrclqehyw1245LYrmfcCMN8J1jZw==}
+  '@esportsplus/typescript@0.34.1':
+    resolution: {integrity: sha512-NZZ7hrt/8eUPylub0vnvViMvwJajU+e+Q2kQ0IkxU5Z/X5fuHrnRziP76MZ1pHDkMLMkW8i6y922zUB6B5ctSw==}
     hasBin: true
 
-  '@esportsplus/utilities@0.28.0':
-    resolution: {integrity: sha512-mQuQ+EPd68d6dGoCZlG3s0dkUtQq7yMsUW7IYqhJobNx5SQ4IqtFbfcAob/EICfwQRy3GYzS2nbHpA9oogSHFw==}
+  '@esportsplus/utilities@0.28.3':
+    resolution: {integrity: sha512-3VkKFM0m2hwZ/N7WXSQecaV+bIS1vf2aqM104l1q/ootoBOASvqqbQlD3CjVRm+SJIY//RspuZFR7DyXGUHKhA==}
 
   '@jridgewell/resolve-uri@3.1.2':
     resolution: {integrity: sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==}
@@ -1228,19 +1228,19 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@esportsplus/cli-passthrough@0.0.15': {}
+  '@esportsplus/cli-passthrough@0.0.18': {}
 
-  '@esportsplus/typescript@0.33.5':
+  '@esportsplus/typescript@0.34.1':
     dependencies:
-      '@esportsplus/cli-passthrough': 0.0.15
-      '@esportsplus/utilities': 0.28.0
-      '@types/node': 26.4.1
+      '@esportsplus/cli-passthrough': 0.0.18
+      '@esportsplus/utilities': 0.28.3
+      '@types/node': 26.5.0
       tsc-alias: 1.9.4
       typescript: 7.0.2
       vscode-languageserver: 10.1.1
       vscode-languageserver-textdocument: 1.0.14
 
-  '@esportsplus/utilities@0.28.0': {}
+  '@esportsplus/utilities@0.28.3': {}
 
   '@jridgewell/resolve-uri@3.1.2': {}
 
