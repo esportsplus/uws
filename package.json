@@ -47,7 +47,8 @@
         "prepublishOnly": "pnpm build && pnpm check:package",
         "smoke": "tsx test/smoke.ts",
         "test": "vitest run",
-        "typecheck": "tsc --noEmit -p tsconfig.json"
+        "typecheck": "tsc --noEmit -p tsconfig.json",
+        "verify": "pnpm build && pnpm typecheck && pnpm build:native && pnpm smoke && pnpm test"
     },
     "type": "module",
     "types": "build/index.d.ts",

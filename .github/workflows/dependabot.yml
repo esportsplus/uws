@@ -1,12 +1,15 @@
 name: dependabot automerge
-
 on:
   pull_request:
-    types: [opened, synchronize, labeled]
+    types: [opened, synchronize, labeled, reopened]
   workflow_dispatch:
-
+permissions:
+  contents: write
+  pull-requests: write
 jobs:
   automerge:
+    uses: esportsplus/typescript/.github/workflows/dependabot.yml@main
+    with:
+      node-version: '26.8.1'
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-    uses: esportsplus/typescript/.github/workflows/dependabot.yml@main

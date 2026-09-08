@@ -12,6 +12,10 @@ registries:
     url: https://registry.npmjs.org
 
 updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
   - package-ecosystem: "npm"
     directory: "/"
     groups:
