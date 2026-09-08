@@ -85,7 +85,7 @@ jobs:
           echo "key=$key" >> "$GITHUB_OUTPUT"
       - name: Cache native binaries
         id: addon-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: dist/*.node
           key: addon-${{ steps.addon.outputs.key }}
@@ -98,7 +98,7 @@ jobs:
           echo "key=$key" >> "$GITHUB_OUTPUT"
       - name: Cache BoringSSL libraries
         if: steps.addon-cache.outputs.cache-hit != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: deps/boringssl-cache/${{ steps.boringssl.outputs.key }}
           key: boringssl-${{ steps.boringssl.outputs.key }}
@@ -159,7 +159,7 @@ jobs:
           echo "key=$key" >> "$GITHUB_OUTPUT"
       - name: Cache native binaries
         id: addon-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: dist/*.node
           key: addon-${{ steps.addon.outputs.key }}
@@ -174,7 +174,7 @@ jobs:
           CXX: clang++
       - name: Cache BoringSSL libraries
         if: steps.addon-cache.outputs.cache-hit != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: deps/boringssl-cache/${{ steps.boringssl.outputs.key }}
           key: boringssl-${{ steps.boringssl.outputs.key }}
@@ -230,7 +230,7 @@ jobs:
           echo "key=$key" >> "$GITHUB_OUTPUT"
       - name: Cache native binaries
         id: addon-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: dist/*.node
           key: addon-${{ steps.addon.outputs.key }}
@@ -243,7 +243,7 @@ jobs:
           echo "key=$key" >> "$GITHUB_OUTPUT"
       - name: Cache BoringSSL libraries
         if: steps.addon-cache.outputs.cache-hit != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: deps/boringssl-cache/${{ steps.boringssl.outputs.key }}
           key: boringssl-${{ steps.boringssl.outputs.key }}
