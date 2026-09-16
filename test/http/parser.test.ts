@@ -396,8 +396,8 @@ describe('maxHeaderSize', () => {
             }), { secure: true });
 
         try {
-            let large = await request(accepted.url, { headers: { 'X-A': 'v'.repeat(40000) } }),
-                small = await request(rejected.url, { headers: { 'X-A': 'v'.repeat(3000) } });
+            let large = await request(`${accepted.url}/hello`, { headers: { 'X-A': 'v'.repeat(40000) } }),
+                small = await request(`${rejected.url}/hello`, { headers: { 'X-A': 'v'.repeat(3000) } });
 
             expect(large.status).toBe(200);
             expect(small.status).toBe(431);
