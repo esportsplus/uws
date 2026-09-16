@@ -1,6 +1,7 @@
 #ifndef UWS_HTTPCONTEXTDATA_H
 #define UWS_HTTPCONTEXTDATA_H
 
+#include "HttpErrors.h"
 #include "HttpRouter.h"
 
 #include <vector>
@@ -32,6 +33,8 @@ private:
     HttpRouter<RouterData> router;
     void *upgradedWebSocket = nullptr;
     bool isParsingHttp = false;
+    /* Per-app request header byte cap; set once by TemplatedApp at construction. */
+    size_t maxHeaderSize = DEFAULT_MAX_HEADER_SIZE;
 };
 
 }

@@ -103,6 +103,10 @@ This fork deliberately differs from uWebSockets.js v20.67.0 in a few API details
 
 See `src/types.ts` for the current API surface.
 
+## Request header size
+
+`App()` and `SSLApp()` accept `maxHeaderSize`, the maximum size in bytes of one request's request line plus header block. It defaults to 16384 (Node's `--max-http-header-size` default) and is fixed at construction; requests over the limit are rejected with `431 Request Header Fields Too Large` and the connection is closed. A separate, fixed cap of 98 headers also returns `431` regardless of this value. `maxHeaderSize` is per app and is ignored when passed to `addServerName`, because SNI domains share the app's HTTP context. It supersedes the old `UWS_HTTP_MAX_HEADERS_SIZE` environment variable, which has been removed.
+
 ## Outbound WebSocket client
 
 This fork adds an outbound client role alongside the server. `Client` dials `ws://`, `SSLClient` dials `wss://`, and both hand back the same `WebSocket` handler contract as an inbound socket (`open`, `message`, `drain`, `close`, `ping`, `pong`, `dropped`, `subscription`, plus `send`/`end`/`close`/`subscribe`/`publish`). A connection that never reaches `open` is reported once through `failed` with a `ConnectError`.

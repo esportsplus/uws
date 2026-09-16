@@ -235,8 +235,11 @@ public:
         other.topicTree = nullptr;
     }
 
-    TemplatedApp(SocketContextOptions options = {}) {
+    TemplatedApp(SocketContextOptions options = {}, size_t maxHeaderSize = DEFAULT_MAX_HEADER_SIZE) {
         httpContext = HttpContext<SSL>::create(Loop::get(), options);
+        if (httpContext) {
+            httpContext->getSocketContextData()->maxHeaderSize = maxHeaderSize;
+        }
 
         /* Register default handler for 404 (can be overridden by user) */
         this->any("/*", [](auto *res, auto */*req*/) {

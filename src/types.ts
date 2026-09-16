@@ -6,6 +6,10 @@ interface AppOptions {
     cert_file_name?: RecognizedString;
     dh_params_file_name?: RecognizedString;
     key_file_name?: RecognizedString;
+    /** Maximum size in bytes of one request's request line plus header block. Requests over the limit
+     * are rejected with 431 and the connection is closed. Set once at construction. Defaults to 16384.
+     * A separate, fixed cap of 98 headers also yields 431 and is not affected by this option. */
+    maxHeaderSize?: number;
     passphrase?: RecognizedString;
     ssl_ciphers?: RecognizedString;
     /** This translates to SSL_MODE_RELEASE_BUFFERS */
@@ -179,7 +183,7 @@ type RecognizedString = string | ArrayBuffer | SharedArrayBuffer | ArrayBufferVi
 
 /** TemplatedApp is either an SSL or non-SSL app. See App for more info, read user manual. */
 interface TemplatedApp {
-    /** Adds a server name. Throws if the TLS options are invalid or the name already exists. */
+    /** Adds a server name. Throws if the TLS options are invalid or the name already exists. `maxHeaderSize` in options is ignored: SNI domains share the app's HTTP context. */
     addServerName(hostname: string, options: AppOptions): TemplatedApp;
     /** Registers an HTTP handler matching specified URL pattern on any HTTP method. */
     any(pattern: RecognizedString, handler: (res: HttpResponse, req: HttpRequest) => void | Promise<void>): TemplatedApp;

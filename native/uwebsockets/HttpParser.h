@@ -7,8 +7,6 @@
 
 #include <string>
 #include <cstring>
-#include <cstdlib>
-#include <cerrno>
 #include <algorithm>
 #include <climits>
 #include <string_view>
@@ -28,22 +26,6 @@ namespace uWS {
 static const unsigned int MINIMUM_HTTP_POST_PADDING = 32;
 static void *FULLPTR = (void *)~(uintptr_t)0;
 
-static const size_t MAX_FALLBACK_SIZE = []() {
-    constexpr size_t DEFAULT_MAX_FALLBACK_SIZE = 4096;
-    char *value = getenv("UWS_HTTP_MAX_HEADERS_SIZE");
-    if (!value) {
-        return DEFAULT_MAX_FALLBACK_SIZE;
-    }
-
-    errno = 0;
-    char *end;
-    long parsed = strtol(value, &end, 10);
-    if (errno == ERANGE || end == value || *end != '\0' || parsed <= 0) {
-        return DEFAULT_MAX_FALLBACK_SIZE;
-    }
-
-    return (size_t) std::min<long>(parsed, 1024 * 1024);
-}();
 #ifndef UWS_HTTP_MAX_HEADERS_COUNT
 #define UWS_HTTP_MAX_HEADERS_COUNT 100
 #endif
@@ -492,7 +474,7 @@ private:
       * or [consumed, nullptr] for "break; I am closed or upgraded to websocket"
       * or [whatever, fullptr] for "break and close me, I am a parser error!" */
     template <int CONSUME_MINIMALLY>
-    std::pair<unsigned int, void *> fenceAndConsumePostPadded(char *data, unsigned int length, void *user, void *reserved, HttpRequest *req, MoveOnlyFunction<void *(void *, HttpRequest *)> &requestHandler, MoveOnlyFunction<void *(void *, std::string_view, uint64_t)> &dataHandler) {
+    std::pair<unsigned int, void *> fenceAndConsumePostPadded(char *data, unsigned int length, void *user, void *reserved, size_t maxHeaderSize, HttpRequest *req, MoveOnlyFunction<void *(void *, HttpRequest *)> &requestHandler, MoveOnlyFunction<void *(void *, std::string_view, uint64_t)> &dataHandler) {
 
         /* How much data we CONSUMED (to throw away) */
         unsigned int consumedTotal = 0;
@@ -509,7 +491,7 @@ private:
             consumedTotal += consumed;
 
             /* Even if we could parse it, check for length here as well */
-            if (consumed > MAX_FALLBACK_SIZE) {
+            if (consumed > maxHeaderSize) {
                 return {HTTP_ERROR_431_REQUEST_HEADER_FIELDS_TOO_LARGE, FULLPTR};
             }
 
@@ -689,7 +671,7 @@ private:
     }
 
 public:
-    std::pair<unsigned int, void *> consumePostPadded(char *data, unsigned int length, void *user, void *reserved, MoveOnlyFunction<void *(void *, HttpRequest *)> &&requestHandler, MoveOnlyFunction<void *(void *, std::string_view, uint64_t)> &&dataHandler) {
+    std::pair<unsigned int, void *> consumePostPadded(char *data, unsigned int length, void *user, void *reserved, size_t maxHeaderSize, MoveOnlyFunction<void *(void *, HttpRequest *)> &&requestHandler, MoveOnlyFunction<void *(void *, std::string_view, uint64_t)> &&dataHandler) {
 
         /* This resets BloomFilter by construction, but later we also reset it again.
          * Optimize this to skip resetting twice (req could be made global) */
@@ -704,14 +686,14 @@ public:
         } else if (fallback.length()) {
             unsigned int had = (unsigned int) fallback.length();
 
-            size_t maxCopyDistance = std::min<size_t>(MAX_FALLBACK_SIZE - fallback.length(), (size_t) length);
+            size_t maxCopyDistance = std::min<size_t>(maxHeaderSize - fallback.length(), (size_t) length);
 
             /* We don't want fallback to be short string optimized, since we want to move it */
             fallback.reserve(fallback.length() + maxCopyDistance + std::max<unsigned int>(MINIMUM_HTTP_POST_PADDING, sizeof(std::string)));
             fallback.append(data, maxCopyDistance);
 
             // break here on break
-            std::pair<unsigned int, void *> consumed = fenceAndConsumePostPadded<true>(fallback.data(), (unsigned int) fallback.length(), user, reserved, &req, requestHandler, dataHandler);
+            std::pair<unsigned int, void *> consumed = fenceAndConsumePostPadded<true>(fallback.data(), (unsigned int) fallback.length(), user, reserved, maxHeaderSize, &req, requestHandler, dataHandler);
             if (consumed.second != user) {
                 return consumed;
             }
@@ -732,14 +714,14 @@ public:
                 }
 
             } else {
-                if (fallback.length() == MAX_FALLBACK_SIZE) {
+                if (fallback.length() == maxHeaderSize) {
                     return {HTTP_ERROR_431_REQUEST_HEADER_FIELDS_TOO_LARGE, FULLPTR};
                 }
                 return {0, user};
             }
         }
 
-        std::pair<unsigned int, void *> consumed = fenceAndConsumePostPadded<false>(data, length, user, reserved, &req, requestHandler, dataHandler);
+        std::pair<unsigned int, void *> consumed = fenceAndConsumePostPadded<false>(data, length, user, reserved, maxHeaderSize, &req, requestHandler, dataHandler);
         if (consumed.second != user) {
             return consumed;
         }
@@ -748,7 +730,7 @@ public:
         length -= consumed.first;
 
         if (length) {
-            if (length < MAX_FALLBACK_SIZE) {
+            if (length < maxHeaderSize) {
                 fallback.append(data, length);
             } else {
                 return {HTTP_ERROR_431_REQUEST_HEADER_FIELDS_TOO_LARGE, FULLPTR};

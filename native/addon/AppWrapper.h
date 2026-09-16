@@ -1052,8 +1052,26 @@ void uWS_App(const FunctionCallbackInfo<Value> &args) {
         return;
     }
 
+    /* maxHeaderSize is not a SocketContextOptions field (the C ABI struct must not grow); read it
+     * here like ClientAppWrapper reads proxy. Reject out-of-range values instead of clamping. */
+    size_t maxHeaderSize = uWS::DEFAULT_MAX_HEADER_SIZE;
+    if (args.Length() > 0 && args[0]->IsObject()) {
+        Local<Object> optionsObject = Local<Object>::Cast(args[0]);
+        Local<Value> maxHeaderSizeValue;
+        if (!optionsObject->Get(isolate->GetCurrentContext(), String::NewFromUtf8(isolate, "maxHeaderSize", NewStringType::kNormal).ToLocalChecked()).ToLocal(&maxHeaderSizeValue)) { return; }
+        if (!maxHeaderSizeValue->IsUndefined()) {
+            int value;
+            if (!requireInt32(args, maxHeaderSizeValue, &value)) { return; }
+            if (value < 1024 || (size_t) value > uWS::MAX_ALLOWED_HEADER_SIZE) {
+                args.GetReturnValue().Set(isolate->ThrowException(v8::Exception::Error(String::NewFromUtf8(isolate, "uWS: maxHeaderSize must be between 1024 and 1048576 bytes", NewStringType::kNormal).ToLocalChecked())));
+                return;
+            }
+            maxHeaderSize = (size_t) value;
+        }
+    }
+
     /* uSockets copies strings here */
-    APP *app = new APP(options);
+    APP *app = new APP(options, maxHeaderSize);
 
     /* Throw if we failed to construct the app */
     if (app->constructorFailed()) {

@@ -139,7 +139,7 @@ private:
 #endif
 
             /* The return value is entirely up to us to interpret. The HttpParser only care for whether the returned value is DIFFERENT or not from passed user */
-            auto [err, returnedSocket] = httpResponseData->consumePostPadded(data, (unsigned int) length, s, proxyParser, [httpContextData](void *s, HttpRequest *httpRequest) -> void * {
+            auto [err, returnedSocket] = httpResponseData->consumePostPadded(data, (unsigned int) length, s, proxyParser, httpContextData->maxHeaderSize, [httpContextData](void *s, HttpRequest *httpRequest) -> void * {
                 /* A prior synchronously-pipelined handler may have closed this socket; never dispatch
                  * onto a closed socket whose HttpResponseData has been destructed. */
                 if (us_socket_is_closed(SSL, (struct us_socket_t *) s)) {

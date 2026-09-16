@@ -1,6 +1,7 @@
 #ifndef UWS_HTTP_ERRORS
 #define UWS_HTTP_ERRORS
 
+#include <cstddef>
 #include <string_view>
 
 namespace uWS {
@@ -10,6 +11,11 @@ enum HttpError {
     HTTP_ERROR_431_REQUEST_HEADER_FIELDS_TOO_LARGE = 2,
     HTTP_ERROR_400_BAD_REQUEST = 3
 };
+
+/* Default cap on request line + headers, matching Node's --max-http-header-size. */
+static constexpr size_t DEFAULT_MAX_HEADER_SIZE = 16 * 1024;
+/* Hard ceiling for any configured value; mirrors the old env-var clamp. */
+static constexpr size_t MAX_ALLOWED_HEADER_SIZE = 1024 * 1024;
 
 #ifndef UWS_HTTPRESPONSE_NO_WRITEMARK
 

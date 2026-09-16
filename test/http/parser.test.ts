@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { App, getParts } from '../../src/index';
+import { App, getParts, SSLApp } from '../../src/index';
 import { listen, raw, request, text } from '../harness';
 import type { HttpResponse, TemplatedApp } from '../../src/index';
 import type { Server } from '../harness';
@@ -11,6 +11,8 @@ const PROXY_V2 = Buffer.concat([
     Buffer.from([10, 0, 0, 1, 10, 0, 0, 2]),
     Buffer.from([0x30, 0x39, 0x00, 0x50])
 ]);
+
+const TLS_OPTIONS = { cert_file_name: '.tmp/cert.pem', key_file_name: '.tmp/key.pem', passphrase: '1234' };
 
 
 let server: Server;
@@ -208,11 +210,32 @@ describe('headers', () => {
         expect(status((await raw(server.port, get('/hello', ['Host: x', 'X-A : v']))).data)).toEqual(['HTTP/1.1 400 Bad Request']);
     });
 
-    it('rejects header blocks over 4096 bytes with 431', async () => {
-        let result = await raw(server.port, get('/hello', ['Host: x', `X-A: ${'v'.repeat(5000)}`]));
+    it('rejects header blocks over 16384 bytes with 431', async () => {
+        let result = await raw(server.port, get('/hello', ['Host: x', `X-A: ${'v'.repeat(17000)}`]));
 
         expect(status(result.data)).toEqual(['HTTP/1.1 431 Request Header Fields Too Large']);
         expect(result.ended).toBe(true);
+    });
+
+    it('accepts header blocks between 4096 and 16384 bytes', async () => {
+        let value = 'v'.repeat(8000),
+            result = await raw(server.port, get('/header', ['Host: x', `X-A: ${value}`]));
+
+        expect(status(result.data)).toEqual(['HTTP/1.1 200 OK']);
+        expect(result.data.toString()).toContain(`[${value}]`);
+    });
+
+    it('accepts a header block of exactly 16384 bytes and rejects one byte more', async () => {
+        let prefix = 'GET /header HTTP/1.1\r\nHost: x\r\nX-A: ',
+            suffix = '\r\n\r\n',
+            atLimit = prefix + 'v'.repeat(16384 - prefix.length - suffix.length) + suffix,
+            overLimit = prefix + 'v'.repeat(16385 - prefix.length - suffix.length) + suffix;
+
+        expect(atLimit.length).toBe(16384);
+        expect(overLimit.length).toBe(16385);
+
+        expect(status((await raw(server.port, atLimit)).data)).toEqual(['HTTP/1.1 200 OK']);
+        expect(status((await raw(server.port, overLimit)).data)).toEqual(['HTTP/1.1 431 Request Header Fields Too Large']);
     });
 
     it('rejects more than 98 headers with 431', async () => {
@@ -286,6 +309,103 @@ describe('headers', () => {
         /* Upstream behavior: TE combinations, including non-final chunked, are treated leniently as chunked. */
         expect(status(gzipChunked.data)).toEqual(['HTTP/1.1 200 OK']);
         expect(status(chunkedIdentity.data)).toEqual(['HTTP/1.1 200 OK']);
+    });
+});
+
+describe('maxHeaderSize', () => {
+    function app(limit?: number): TemplatedApp {
+        return App(limit === undefined ? {} : { maxHeaderSize: limit }).get('/hello', (res) => {
+            res.end('Hello World!');
+        });
+    }
+
+    it('rejects blocks over a custom limit', async () => {
+        let server = listen(app(2048));
+
+        try {
+            let result = await raw(server.port, get('/hello', ['Host: x', `X-A: ${'v'.repeat(3000)}`]));
+
+            expect(status(result.data)).toEqual(['HTTP/1.1 431 Request Header Fields Too Large']);
+            expect(result.ended).toBe(true);
+        }
+        finally {
+            server.close();
+        }
+    });
+
+    it('accepts blocks under a custom limit larger than the default', async () => {
+        let server = listen(app(65536));
+
+        try {
+            let result = await raw(server.port, get('/hello', ['Host: x', `X-A: ${'v'.repeat(40000)}`]));
+
+            expect(status(result.data)).toEqual(['HTTP/1.1 200 OK']);
+            expect(result.data.toString()).toContain('Hello World!');
+        }
+        finally {
+            server.close();
+        }
+    });
+
+    it('limits are independent per app', async () => {
+        let small = listen(app(2048)),
+            large = listen(app(65536));
+
+        try {
+            let request = get('/hello', ['Host: x', `X-A: ${'v'.repeat(3000)}`]);
+
+            expect(status((await raw(small.port, request)).data)).toEqual(['HTTP/1.1 431 Request Header Fields Too Large']);
+            expect(status((await raw(large.port, request)).data)).toEqual(['HTTP/1.1 200 OK']);
+        }
+        finally {
+            small.close();
+            large.close();
+        }
+    });
+
+    it('caps fragmented header blocks by the same limit', async () => {
+        let server = listen(app(2048)),
+            request = get('/hello', ['Host: x', `X-A: ${'v'.repeat(3500)}`]),
+            split = Math.floor(request.length / 2);
+
+        try {
+            let result = await raw(server.port, [request.slice(0, split), request.slice(split)], { delay: 50 });
+
+            expect(status(result.data)).toEqual(['HTTP/1.1 431 Request Header Fields Too Large']);
+            expect(result.ended).toBe(true);
+        }
+        finally {
+            server.close();
+        }
+    });
+
+    it('rejects invalid values', () => {
+        expect(() => App({ maxHeaderSize: 0 })).toThrow();
+        expect(() => App({ maxHeaderSize: -1 })).toThrow();
+        expect(() => App({ maxHeaderSize: 1.5 })).toThrow();
+        expect(() => App({ maxHeaderSize: 'big' as unknown as number })).toThrow();
+        expect(() => App({ maxHeaderSize: 2 * 1024 * 1024 })).toThrow();
+    });
+
+    it('applies accept and reject limits on SSLApp', async () => {
+        let accepted = listen(SSLApp({ ...TLS_OPTIONS, maxHeaderSize: 65536 }).get('/hello', (res) => {
+                res.end('Hello World!');
+            }), { secure: true }),
+            rejected = listen(SSLApp({ ...TLS_OPTIONS, maxHeaderSize: 2048 }).get('/hello', (res) => {
+                res.end('Hello World!');
+            }), { secure: true });
+
+        try {
+            let large = await request(accepted.url, { headers: { 'X-A': 'v'.repeat(40000) } }),
+                small = await request(rejected.url, { headers: { 'X-A': 'v'.repeat(3000) } });
+
+            expect(large.status).toBe(200);
+            expect(small.status).toBe(431);
+        }
+        finally {
+            accepted.close();
+            rejected.close();
+        }
     });
 });
 
